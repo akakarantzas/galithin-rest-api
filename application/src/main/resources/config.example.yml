@@ -1,0 +1,73 @@
+server:
+  host: 0.0.0.0
+  port: ${SERVER_PORT:-8080}
+  corsOrigins:
+    - https://example.com
+  trustedProxies:
+    - 127.0.0.1/32
+
+security:
+  apiKeySha256:
+    - ${GALITHIN_API_KEY_SHA256:-}
+  publicRequestsPerMinute: 120
+  publicBurst: 30
+  authenticatedRequestsPerMinute: 1200
+  authenticatedBurst: 100
+
+projection:
+  pollIntervalMillis: 2000
+  reconciliationIntervalSeconds: 300
+  batchSize: 250
+
+exclusions:
+  groups: []
+  uuids: []
+  names: []
+
+cache:
+  profileSeconds: 5
+  leaderboardSeconds: 15
+  catalogSeconds: 300
+
+openGraph:
+  enabled: true
+  renderPageBaseUrl: ${GALITHIN_SITE_URL:-https://galithin.com}
+  fallbackImageUrl: ${GALITHIN_OG_FALLBACK_URL:-https://galithin.com/static/images/statsBg.png}
+  cacheDirectory: ${GALITHIN_OG_CACHE_PATH:-./data/opengraph}
+  browserExecutablePath: ${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-}
+  maxConcurrentRenders: 2
+  rendersPerIpPerHour: 10
+  renderTimeoutSeconds: 25
+  retryAfterSeconds: 300
+
+content:
+  bundlePath: ${GALITHIN_CONTENT_BUNDLE:-./content/galithin-web-content.zip}
+
+# Local API-owned database. The .mv.db suffix is added automatically by H2.
+storage:
+  readModelPath: ${GALITHIN_READ_MODEL_PATH:-./data/galithin-read-model}
+  maximumPoolSize: 8
+
+# Read-only access to the existing LuckPerms schema; no Core identity table is used.
+luckPerms:
+  tablePrefix: luckperms_
+  serverContext: global
+
+databases:
+  # Reuse the credentials already configured for each production plugin database.
+  # These API connections are opened in JDBC read-only mode.
+  huskSync:
+    jdbcUrl: ${HUSKSYNC_DB_URL}
+    username: ${HUSKSYNC_DB_USER}
+    password: ${HUSKSYNC_DB_PASSWORD}
+    maximumPoolSize: 4
+  core:
+    jdbcUrl: ${GALITHIN_CORE_DB_URL}
+    username: ${GALITHIN_CORE_DB_USER}
+    password: ${GALITHIN_CORE_DB_PASSWORD}
+    maximumPoolSize: 4
+  luckPerms:
+    jdbcUrl: ${LUCKPERMS_DB_URL}
+    username: ${LUCKPERMS_DB_USER}
+    password: ${LUCKPERMS_DB_PASSWORD}
+    maximumPoolSize: 2

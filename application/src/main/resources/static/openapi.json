@@ -1,0 +1,877 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Galithin REST API",
+    "version": "1.0.0",
+    "description": "Public projected profiles, equipment, statistics, abilities, talents, guilds, leaderboards, and versioned content assets for the Galithin RPG Minecraft server."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current API origin"
+    }
+  ],
+  "tags": [
+    { "name": "Players" },
+    { "name": "Guilds" },
+    { "name": "Leaderboards" },
+    { "name": "Content" },
+    { "name": "Operations" }
+  ],
+  "paths": {
+    "/api/v1/players/{identifier}": {
+      "get": {
+        "tags": ["Players"],
+        "operationId": "getPlayerProfile",
+        "summary": "Get a public player profile",
+        "description": "Resolves a canonical UUID or a case-insensitive current player name. Leaderboard exclusions do not make profiles private.",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "description": "Canonical UUID or current player name.",
+            "schema": { "type": "string", "minLength": 1 },
+            "examples": {
+              "name": { "value": "Apostolos" },
+              "uuid": { "value": "f84c6a79-2c4f-4f14-93f6-a401fd70c95a" }
+            }
+          },
+          { "$ref": "#/components/parameters/IfNoneMatch" }
+        ],
+        "security": [ {}, { "bearerAuth": [] } ],
+        "responses": {
+          "200": {
+            "description": "Complete public player profile.",
+            "headers": {
+              "ETag": { "$ref": "#/components/headers/ETag" },
+              "Cache-Control": { "$ref": "#/components/headers/CacheControl" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlayerProfileResponse" }
+              }
+            }
+          },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/players/{identifier}/opengraph": {
+      "get": {
+        "tags": ["Players"],
+        "operationId": "getPlayerOpenGraphImage",
+        "summary": "Get a versioned player Open Graph image",
+        "description": "Validates the player, redirects unversioned or unknown stale requests to the current equipment hash, serves historical generated versions from persistent storage, and renders cache misses through a concurrency-limited Chromium process.",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "description": "Canonical UUID or current player name.",
+            "schema": { "type": "string", "minLength": 1 }
+          },
+          {
+            "name": "v",
+            "in": "query",
+            "required": false,
+            "description": "First 16 hexadecimal characters of the equipment-version SHA-256 hash. Omit it to receive a temporary redirect to the current version.",
+            "schema": { "type": "string", "pattern": "^[a-f0-9]{16}$" }
+          },
+          { "$ref": "#/components/parameters/IfNoneMatch" }
+        ],
+        "security": [ {}, { "bearerAuth": [] } ],
+        "responses": {
+          "200": {
+            "description": "A generated or persistently cached 1600 by 900 PNG.",
+            "headers": {
+              "ETag": { "$ref": "#/components/headers/ETag" },
+              "Cache-Control": {
+                "description": "Versioned images are public and immutable for one year.",
+                "schema": { "type": "string", "example": "public, max-age=31536000, immutable" }
+              }
+            },
+            "content": {
+              "image/png": { "schema": { "type": "string", "contentEncoding": "binary" } }
+            }
+          },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "307": {
+            "description": "Redirects to the current version URL, or to the configured static fallback when validation, capacity, throttling, or rendering prevents generation.",
+            "headers": {
+              "Location": {
+                "schema": { "type": "string", "format": "uri-reference" }
+              },
+              "Retry-After": {
+                "schema": { "type": "integer", "minimum": 1 }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/guilds/{identifier}": {
+      "get": {
+        "tags": ["Guilds"],
+        "operationId": "getGuildProfile",
+        "summary": "Get a public guild profile",
+        "description": "Resolves a canonical guild UUID, case-insensitive display name, or case-insensitive tag. If a name and another guild's tag collide, the name match takes precedence.",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "description": "Guild UUID, display name, or tag.",
+            "schema": { "type": "string", "minLength": 1 }
+          },
+          { "$ref": "#/components/parameters/IfNoneMatch" }
+        ],
+        "security": [ {}, { "bearerAuth": [] } ],
+        "responses": {
+          "200": {
+            "description": "Public guild profile with rich member summaries and safe capacity information.",
+            "headers": {
+              "ETag": { "$ref": "#/components/headers/ETag" },
+              "Cache-Control": { "$ref": "#/components/headers/CacheControl" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GuildProfileResponse" }
+              }
+            }
+          },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/leaderboards/players/level": {
+      "get": {
+        "tags": ["Leaderboards"],
+        "operationId": "getPlayerLevelLeaderboard",
+        "summary": "Get the player level leaderboard",
+        "description": "Orders eligible players by level descending, experience descending, then UUID ascending.",
+        "parameters": [
+          { "$ref": "#/components/parameters/PageLimit" },
+          { "$ref": "#/components/parameters/Cursor" },
+          { "$ref": "#/components/parameters/LeaderboardSearch" },
+          { "$ref": "#/components/parameters/LeaderboardAround" },
+          { "$ref": "#/components/parameters/IfNoneMatch" }
+        ],
+        "security": [ {}, { "bearerAuth": [] } ],
+        "responses": {
+          "200": {
+            "description": "Cursor page of player rankings.",
+            "headers": {
+              "ETag": { "$ref": "#/components/headers/ETag" },
+              "Cache-Control": { "$ref": "#/components/headers/CacheControl" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlayerLeaderboardResponse" }
+              }
+            }
+          },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/leaderboards/guilds/level": {
+      "get": {
+        "tags": ["Leaderboards"],
+        "operationId": "getGuildLevelLeaderboard",
+        "summary": "Get the guild level leaderboard",
+        "description": "Orders active guilds by level descending, total experience descending, then guild UUID ascending. Text searches match guild names or tags by case-insensitive substring, or an exact player name to return that player's guild entry.",
+        "parameters": [
+          { "$ref": "#/components/parameters/PageLimit" },
+          { "$ref": "#/components/parameters/Cursor" },
+          { "$ref": "#/components/parameters/LeaderboardSearch" },
+          { "$ref": "#/components/parameters/LeaderboardAround" },
+          { "$ref": "#/components/parameters/IfNoneMatch" }
+        ],
+        "security": [ {}, { "bearerAuth": [] } ],
+        "responses": {
+          "200": {
+            "description": "Cursor page of guild rankings.",
+            "headers": {
+              "ETag": { "$ref": "#/components/headers/ETag" },
+              "Cache-Control": { "$ref": "#/components/headers/CacheControl" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GuildLeaderboardResponse" }
+              }
+            }
+          },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/api/v1/catalog/{kind}": {
+      "get": {
+        "tags": ["Content"],
+        "operationId": "getCatalog",
+        "summary": "Get a presentation catalog",
+        "description": "Items contains web-visible gear only. Ability, talent, badge, and rank presentation is returned through its matching catalog. Guilds returns the progression and reward-limit configuration generated from Core guild.yml.",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["items", "abilities", "talents", "badges", "ranks", "guilds"]
+            }
+          },
+          { "$ref": "#/components/parameters/IfNoneMatch" }
+        ],
+        "security": [ {}, { "bearerAuth": [] } ],
+        "responses": {
+          "200": {
+            "description": "All entries for the requested catalog kind.",
+            "headers": {
+              "ETag": { "$ref": "#/components/headers/ETag" },
+              "Cache-Control": { "$ref": "#/components/headers/CacheControl" }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/CatalogResponse" },
+                    { "$ref": "#/components/schemas/GuildCatalogResponse" }
+                  ]
+                }
+              }
+            }
+          },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/assets/{catalogVersion}/{path}": {
+      "get": {
+        "tags": ["Content"],
+        "operationId": "getContentAsset",
+        "summary": "Get an immutable content asset",
+        "description": "The path may contain slash-separated segments. Use URLs supplied by the API. Only the active catalog version resolves.",
+        "parameters": [
+          {
+            "name": "catalogVersion",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^[a-f0-9]{24}$" }
+          },
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "description": "Bundle-relative asset path, potentially containing slashes.",
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        ],
+        "security": [ {}, { "bearerAuth": [] } ],
+        "responses": {
+          "200": {
+            "description": "Asset bytes. Content-Type is inferred from the file.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Always public, one year, immutable.",
+                "schema": { "type": "string", "example": "public, max-age=31536000, immutable" }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "type": "object" } },
+              "image/png": { "schema": { "type": "string", "contentEncoding": "binary" } },
+              "application/octet-stream": { "schema": { "type": "string", "contentEncoding": "binary" } }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "tags": ["Operations"],
+        "operationId": "getLiveness",
+        "summary": "Process liveness",
+        "responses": {
+          "200": {
+            "description": "The HTTP process is live.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Liveness" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "tags": ["Operations"],
+        "operationId": "getReadiness",
+        "summary": "Projection and content readiness",
+        "responses": {
+          "200": {
+            "description": "A valid catalog and at least one projected profile are available.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Readiness" }
+              }
+            }
+          },
+          "503": {
+            "description": "No usable projection or content catalog exists yet.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Readiness" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": ["Operations"],
+        "operationId": "getMetrics",
+        "summary": "Get Prometheus metrics",
+        "security": [ { "bearerAuth": [] } ],
+        "responses": {
+          "200": {
+            "description": "Prometheus exposition format.",
+            "content": {
+              "text/plain": { "schema": { "type": "string" } }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": ["Operations"],
+        "operationId": "getOpenApiContract",
+        "summary": "Get this OpenAPI contract",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 JSON document.",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Opaque API key",
+        "description": "Optional for public routes and required for metrics. The server stores only SHA-256 digests."
+      }
+    },
+    "parameters": {
+      "PageLimit": {
+        "name": "limit",
+        "in": "query",
+        "description": "Requested page size. Values are clamped to 1 through 100.",
+        "schema": { "type": "integer", "default": 50, "minimum": 1, "maximum": 100 }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "description": "Opaque keyset cursor returned by the previous page.",
+        "schema": { "type": "string", "minLength": 1 }
+      },
+      "LeaderboardSearch": {
+        "name": "search",
+        "in": "query",
+        "description": "Case-insensitive name search, or an exact global position as a positive integer optionally prefixed with #. On guild leaderboards, also matches guild tags by substring and exact player names.",
+        "schema": { "type": "string", "maxLength": 64 }
+      },
+      "LeaderboardAround": {
+        "name": "around",
+        "in": "query",
+        "description": "Returns a page centered around this global position. Mutually exclusive with search.",
+        "schema": { "type": "integer", "format": "int64", "minimum": 1 }
+      },
+      "IfNoneMatch": {
+        "name": "If-None-Match",
+        "in": "header",
+        "required": false,
+        "description": "A response ETag. A match produces 304.",
+        "schema": { "type": "string" }
+      }
+    },
+    "headers": {
+      "ETag": {
+        "description": "Quoted SHA-256 of the serialized response envelope.",
+        "schema": { "type": "string" }
+      },
+      "CacheControl": {
+        "description": "Public cache policy for this response.",
+        "schema": { "type": "string" }
+      }
+    },
+    "responses": {
+      "NotModified": {
+        "description": "The supplied ETag matches; no response body."
+      },
+      "BadRequest": {
+        "description": "Invalid identifier, limit, cursor, or catalog kind.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetail" } }
+        }
+      },
+      "Unauthorized": {
+        "description": "Bearer credentials are missing where required, malformed, or invalid.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetail" } }
+        }
+      },
+      "NotFound": {
+        "description": "The requested player, guild, asset, or route does not exist.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetail" } }
+        }
+      },
+      "TooManyRequests": {
+        "description": "The request token bucket is exhausted.",
+        "headers": {
+          "Retry-After": {
+            "description": "Retry delay in seconds.",
+            "schema": { "type": "integer", "const": 60 }
+          }
+        },
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetail" } }
+        }
+      },
+      "InternalServerError": {
+        "description": "Unexpected server failure. The public detail is intentionally generic.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetail" } }
+        }
+      }
+    },
+    "schemas": {
+      "RichText": {
+        "type": "object",
+        "required": ["adventureJson", "plainText", "sanitizedHtml", "sourceMiniMessage"],
+        "properties": {
+          "adventureJson": { "type": "string", "description": "Canonical Adventure Gson component JSON." },
+          "plainText": { "type": "string", "description": "Accessible/search fallback without shift markers." },
+          "sanitizedHtml": { "type": "string", "description": "Escaped, controlled span/img HTML for immediate website display." },
+          "sourceMiniMessage": { "type": ["string", "null"], "description": "Original source when generated from MiniMessage." }
+        }
+      },
+      "AssetReference": {
+        "type": "object",
+        "required": ["catalogVersion", "modelUrl", "equipmentUrl", "textures"],
+        "properties": {
+          "catalogVersion": { "type": "string" },
+          "modelUrl": { "type": ["string", "null"], "description": "Minecraft item/model definition used to render the item itself or in a hand/display context." },
+          "equipmentUrl": { "type": ["string", "null"], "description": "Minecraft equipment definition used to render wearable humanoid layers." },
+          "textures": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      },
+      "TooltipStyleReference": {
+        "type": "object",
+        "required": ["id", "catalogVersion", "backgroundUrl", "frameUrl"],
+        "properties": {
+          "id": { "type": "string", "description": "Saved Minecraft tooltip style resource key." },
+          "catalogVersion": { "type": "string" },
+          "backgroundUrl": { "type": "string" },
+          "frameUrl": { "type": "string" }
+        }
+      },
+      "RankPresentation": {
+        "type": "object",
+        "required": ["id", "label", "prefix", "icon"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "$ref": "#/components/schemas/RichText" },
+          "prefix": { "oneOf": [ { "$ref": "#/components/schemas/RichText" }, { "type": "null" } ] },
+          "icon": { "oneOf": [ { "$ref": "#/components/schemas/RichText" }, { "type": "null" } ] }
+        }
+      },
+      "BadgePresentation": {
+        "type": "object",
+        "required": ["id", "slot", "name", "lore", "assets"],
+        "properties": {
+          "id": { "type": "string" },
+          "slot": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "name": { "$ref": "#/components/schemas/RichText" },
+          "lore": { "type": "array", "items": { "$ref": "#/components/schemas/RichText" } },
+          "assets": { "oneOf": [ { "$ref": "#/components/schemas/AssetReference" }, { "type": "null" } ] }
+        }
+      },
+      "GuildSummary": {
+        "type": "object",
+        "required": ["id", "name", "tag", "level"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "tag": { "type": ["string", "null"] },
+          "level": { "type": "integer" }
+        }
+      },
+      "EquipmentSlot": {
+        "type": "string",
+        "enum": ["HEAD", "CHEST", "LEGS", "FEET", "BACKPACK", "NECKLACE", "RING", "MAGNET", "MAIN_HAND", "OFF_HAND"]
+      },
+      "EquipmentItem": {
+        "type": "object",
+        "required": ["slot", "itemId", "nexoId", "material", "amount", "itemUuid", "rarity", "tier", "requiredLevel", "durability", "maximumDurability", "repairs", "name", "lore", "modifiers", "attributes", "assets", "tooltipStyle"],
+        "properties": {
+          "slot": { "$ref": "#/components/schemas/EquipmentSlot" },
+          "itemId": { "type": "string" },
+          "nexoId": { "type": ["string", "null"] },
+          "material": { "type": "string" },
+          "amount": { "type": "integer", "minimum": 1 },
+          "itemUuid": { "type": ["string", "null"] },
+          "rarity": { "type": ["string", "null"] },
+          "tier": { "type": ["string", "null"] },
+          "requiredLevel": { "type": ["integer", "null"] },
+          "durability": { "type": ["integer", "null"] },
+          "maximumDurability": { "type": ["integer", "null"] },
+          "repairs": { "type": ["integer", "null"] },
+          "name": { "$ref": "#/components/schemas/RichText" },
+          "lore": { "type": "array", "items": { "$ref": "#/components/schemas/RichText" } },
+          "modifiers": {
+            "type": "object",
+            "additionalProperties": { "type": "number", "format": "double" }
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "assets": { "oneOf": [ { "$ref": "#/components/schemas/AssetReference" }, { "type": "null" } ] },
+          "tooltipStyle": { "oneOf": [ { "$ref": "#/components/schemas/TooltipStyleReference" }, { "type": "null" } ] }
+        }
+      },
+      "PlayerStatistics": {
+        "type": "object",
+        "required": ["advancementCount", "kills", "deaths", "firstJoinedAt", "lastJoinedAt", "playTimeSeconds", "damage", "health", "defense", "mana"],
+        "properties": {
+          "advancementCount": { "type": "integer", "minimum": 0 },
+          "kills": { "type": "integer", "format": "int64", "minimum": 0 },
+          "deaths": { "type": "integer", "format": "int64", "minimum": 0 },
+          "firstJoinedAt": { "type": ["string", "null"], "format": "date-time" },
+          "lastJoinedAt": { "type": ["string", "null"], "format": "date-time" },
+          "playTimeSeconds": { "type": "integer", "format": "int64", "minimum": 0 },
+          "damage": { "type": "number", "format": "double", "description": "Calculated attack damage shown by the in-game profile." },
+          "health": { "type": "number", "format": "double", "minimum": 0, "description": "Calculated maximum health shown by the in-game profile." },
+          "defense": { "type": "number", "format": "double", "description": "Calculated defense ratio; 0.18 is rendered in-game as 18%." },
+          "mana": { "type": "number", "format": "double", "minimum": 0, "description": "Calculated maximum mana shown by the in-game profile." }
+        }
+      },
+      "DungeonStatistics": {
+        "type": "object",
+        "required": ["values"],
+        "properties": {
+          "values": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "ProgressionEntry": {
+        "type": "object",
+        "required": ["id", "group", "specialization", "unlocked", "selected", "baseLevel", "equipmentBonus", "effectiveLevel", "maximumLevel", "name", "lore", "currentValues", "nextValues", "assets"],
+        "properties": {
+          "id": { "type": "string" },
+          "group": { "type": ["string", "null"] },
+          "specialization": { "type": ["string", "null"] },
+          "unlocked": { "type": "boolean" },
+          "selected": { "type": "boolean" },
+          "baseLevel": { "type": "integer", "minimum": 0 },
+          "equipmentBonus": { "type": "integer" },
+          "effectiveLevel": { "type": "integer", "minimum": 0 },
+          "maximumLevel": { "type": "integer", "minimum": 1 },
+          "name": { "$ref": "#/components/schemas/RichText" },
+          "lore": { "type": "array", "items": { "$ref": "#/components/schemas/RichText" } },
+          "currentValues": { "type": "object", "additionalProperties": true },
+          "nextValues": { "type": ["object", "null"], "additionalProperties": true },
+          "assets": { "oneOf": [ { "$ref": "#/components/schemas/AssetReference" }, { "type": "null" } ] }
+        }
+      },
+      "PlayerProfile": {
+        "type": "object",
+        "required": ["uuid", "name", "level", "experience", "rank", "badges", "guild", "equipment", "statistics", "dungeonStatistics", "abilities", "talents"],
+        "properties": {
+          "uuid": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "level": { "type": "integer", "minimum": 1 },
+          "experience": { "type": "integer", "format": "int64", "minimum": 0 },
+          "rank": { "$ref": "#/components/schemas/RankPresentation" },
+          "badges": { "type": "array", "maxItems": 3, "items": { "$ref": "#/components/schemas/BadgePresentation" } },
+          "guild": { "oneOf": [ { "$ref": "#/components/schemas/GuildSummary" }, { "type": "null" } ] },
+          "equipment": { "type": "array", "items": { "$ref": "#/components/schemas/EquipmentItem" } },
+          "statistics": { "$ref": "#/components/schemas/PlayerStatistics" },
+          "dungeonStatistics": { "$ref": "#/components/schemas/DungeonStatistics" },
+          "abilities": { "type": "array", "items": { "$ref": "#/components/schemas/ProgressionEntry" } },
+          "talents": { "type": "array", "items": { "$ref": "#/components/schemas/ProgressionEntry" } }
+        }
+      },
+      "PlayerLeaderboardEntry": {
+        "type": "object",
+        "required": ["position", "uuid", "name", "level", "experience", "rank", "badges", "guild", "projectedAt"],
+        "properties": {
+          "position": { "type": "integer", "format": "int64", "minimum": 1 },
+          "uuid": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "level": { "type": "integer" },
+          "experience": { "type": "integer", "format": "int64" },
+          "rank": { "$ref": "#/components/schemas/RankPresentation" },
+          "badges": { "type": "array", "items": { "$ref": "#/components/schemas/BadgePresentation" } },
+          "guild": { "oneOf": [ { "$ref": "#/components/schemas/GuildSummary" }, { "type": "null" } ] },
+          "projectedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "GuildLeaderboardEntry": {
+        "type": "object",
+        "required": ["position", "id", "name", "tag", "level", "totalExperience", "ownerUuid", "memberCount", "projectedAt"],
+        "properties": {
+          "position": { "type": "integer", "format": "int64", "minimum": 1 },
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "tag": { "type": ["string", "null"] },
+          "level": { "type": "integer" },
+          "totalExperience": { "type": "integer", "format": "int64" },
+          "ownerUuid": { "type": "string", "format": "uuid" },
+          "memberCount": { "type": "integer", "minimum": 1 },
+          "projectedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "GuildProgression": {
+        "type": "object",
+        "required": ["level", "currentExperience", "requiredExperience", "experienceToNextLevel", "totalExperience", "maximumLevel"],
+        "properties": {
+          "level": { "type": "integer", "minimum": 1 },
+          "currentExperience": { "type": "integer", "format": "int64", "minimum": 0 },
+          "requiredExperience": { "type": "integer", "format": "int64", "minimum": 0 },
+          "experienceToNextLevel": { "type": "integer", "format": "int64", "minimum": 0 },
+          "totalExperience": { "type": "integer", "format": "int64", "minimum": 0 },
+          "maximumLevel": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "GuildCapacity": {
+        "type": "object",
+        "required": ["used", "limit"],
+        "properties": {
+          "used": { "type": "integer", "minimum": 0 },
+          "limit": { "type": ["integer", "null"], "minimum": 0, "description": "Null means the current Core configuration imposes no cap." }
+        }
+      },
+      "GuildMemberSummary": {
+        "type": "object",
+        "required": ["uuid", "name", "role", "level", "rank", "badges", "lastSeenAt", "totalContribution", "profileAvailable"],
+        "properties": {
+          "uuid": { "type": "string", "format": "uuid" },
+          "name": { "type": ["string", "null"] },
+          "role": { "type": "string", "enum": ["owner", "mod", "member"] },
+          "level": { "type": ["integer", "null"], "minimum": 1 },
+          "rank": { "oneOf": [ { "$ref": "#/components/schemas/RankPresentation" }, { "type": "null" } ] },
+          "badges": { "type": "array", "items": { "$ref": "#/components/schemas/BadgePresentation" } },
+          "lastSeenAt": { "type": ["string", "null"], "format": "date-time" },
+          "totalContribution": { "type": "integer", "format": "int64", "minimum": 0 },
+          "profileAvailable": { "type": "boolean" }
+        }
+      },
+      "GuildProfile": {
+        "type": "object",
+        "required": ["id", "name", "tag", "ownerUuid", "progression", "memberCapacity", "claimCapacity", "members", "projectedAt"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "tag": { "type": ["string", "null"] },
+          "ownerUuid": { "type": "string", "format": "uuid" },
+          "progression": { "$ref": "#/components/schemas/GuildProgression" },
+          "memberCapacity": { "$ref": "#/components/schemas/GuildCapacity" },
+          "claimCapacity": { "$ref": "#/components/schemas/GuildCapacity" },
+          "members": { "type": "array", "items": { "$ref": "#/components/schemas/GuildMemberSummary" } },
+          "projectedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PlayerLeaderboardPage": {
+        "type": "object",
+        "required": ["entries", "nextCursor"],
+        "properties": {
+          "entries": { "type": "array", "items": { "$ref": "#/components/schemas/PlayerLeaderboardEntry" } },
+          "nextCursor": { "type": ["string", "null"] }
+        }
+      },
+      "GuildLeaderboardPage": {
+        "type": "object",
+        "required": ["entries", "nextCursor"],
+        "properties": {
+          "entries": { "type": "array", "items": { "$ref": "#/components/schemas/GuildLeaderboardEntry" } },
+          "nextCursor": { "type": ["string", "null"] }
+        }
+      },
+      "CatalogKind": {
+        "type": "string",
+        "enum": ["ITEMS", "ABILITIES", "TALENTS", "BADGES", "RANKS"]
+      },
+      "CatalogEntry": {
+        "type": "object",
+        "required": ["id", "kind", "name", "lore", "group", "maximumLevel", "levels", "assets", "metadata"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "$ref": "#/components/schemas/CatalogKind" },
+          "name": { "$ref": "#/components/schemas/RichText" },
+          "lore": { "type": "array", "items": { "$ref": "#/components/schemas/RichText" } },
+          "group": { "type": ["string", "null"] },
+          "maximumLevel": { "type": ["integer", "null"] },
+          "levels": {
+            "type": "object",
+            "additionalProperties": { "type": "object", "additionalProperties": true }
+          },
+          "assets": { "oneOf": [ { "$ref": "#/components/schemas/AssetReference" }, { "type": "null" } ] },
+          "metadata": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "GuildLevelReward": {
+        "type": "object",
+        "required": ["maximumMembers", "maximumClaims"],
+        "properties": {
+          "maximumMembers": { "type": ["integer", "null"], "minimum": 0 },
+          "maximumClaims": { "type": ["integer", "null"], "minimum": 0 }
+        }
+      },
+      "GuildCatalog": {
+        "type": "object",
+        "required": ["baseExperienceCost", "experienceIncreasePerLevel", "maximumLevel", "rewards"],
+        "properties": {
+          "baseExperienceCost": { "type": "integer", "format": "int64", "minimum": 1 },
+          "experienceIncreasePerLevel": { "type": "number", "exclusiveMinimum": 0 },
+          "maximumLevel": { "type": "integer", "minimum": 1 },
+          "rewards": {
+            "type": "object",
+            "description": "Map keyed by the level at which each capacity reward becomes active.",
+            "additionalProperties": { "$ref": "#/components/schemas/GuildLevelReward" }
+          }
+        }
+      },
+      "ResponseMeta": {
+        "type": "object",
+        "required": ["apiVersion", "catalogVersion", "sourceSavedAt", "projectedAt", "stale"],
+        "properties": {
+          "apiVersion": { "type": "string", "const": "v1" },
+          "catalogVersion": { "type": "string" },
+          "sourceSavedAt": { "type": ["string", "null"], "format": "date-time" },
+          "projectedAt": { "type": "string", "format": "date-time" },
+          "stale": { "type": "boolean" }
+        }
+      },
+      "PlayerProfileResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/PlayerProfile" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "PlayerLeaderboardResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/PlayerLeaderboardPage" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "GuildProfileResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/GuildProfile" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "GuildLeaderboardResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/GuildLeaderboardPage" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "CatalogResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/CatalogEntry" } },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "GuildCatalogResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/GuildCatalog" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "ProblemDetail": {
+        "type": "object",
+        "required": ["type", "title", "status", "detail", "instance"],
+        "properties": {
+          "type": { "type": "string", "format": "uri" },
+          "title": { "type": "string" },
+          "status": { "type": "integer", "minimum": 400, "maximum": 599 },
+          "detail": { "type": "string" },
+          "instance": { "type": "string" }
+        }
+      },
+      "Liveness": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": { "type": "string", "const": "up" }
+        }
+      },
+      "Readiness": {
+        "type": "object",
+        "required": ["status", "stale", "catalogVersion", "projectedAt", "detail"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ready", "not_ready"] },
+          "stale": { "type": "boolean" },
+          "catalogVersion": { "type": "string" },
+          "projectedAt": { "type": "string", "format": "date-time" },
+          "detail": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}
