@@ -1,5 +1,7 @@
 # Galithin REST API
 
+![Galithin REST API](docs/assets/hero-banner.png)
+
 The Galithin REST API is a standalone Java 25/Kotlin service for the Galithin RPG Minecraft server. It projects HuskSync player snapshots, Galithin guild data, LuckPerms rank presentation, and a versioned Nexo content bundle into a web-friendly API.
 
 HTTP requests read only the API-owned embedded H2 read model and the in-memory content catalog. They never decompress HuskSync data or query production plugin databases directly. The service reuses the existing HuskSync, Core, and LuckPerms MariaDB credentials for read-only source connections; it does not require a MariaDB schema or account of its own.
